@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Выписка → FirstBit ERP</title>
+
+<!-- Парсинг в браузере: PDF.js (PDF) и SheetJS (Excel). Бинарь не уходит на сервер. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap" rel="stylesheet" />
+
+<style>
+  :root {
+    --paper: #f3efe6;
+    --paper-2: #ebe6d9;
+    --ink: #1c1b16;
+    --ink-soft: #56524a;
+    --line: #cfc8b8;
+    --accent: #1f5d3f;        /* глубокий «ледгерный» зелёный */
+    --accent-deep: #143f2b;
+    --warn: #9a5b1a;
+    --danger: #8a2b22;
+    --shadow: 0 1px 0 rgba(0,0,0,.04), 0 18px 40px -28px rgba(20,40,30,.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    font-family: "IBM Plex Sans", sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(120% 90% at 80% -10%, #fbf8f0 0%, transparent 55%),
+      var(--paper);
+    background-attachment: fixed;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 56px 24px 96px; }
+
+  header { border-bottom: 1.5px solid var(--ink); padding-bottom: 18px; margin-bottom: 36px; }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 10px;
+  }
+  h1 {
+    font-family: "IBM Plex Serif", serif;
+    font-weight: 600; font-size: clamp(30px, 5vw, 46px);
+    line-height: 1.05; margin: 0; letter-spacing: -.01em;
+  }
+  h1 em { font-style: italic; color: var(--accent-deep); }
+  .lede { color: var(--ink-soft); margin: 14px 0 0; max-width: 60ch; font-size: 15px; }
+
+  .card {
+    background: #fcfaf4;
+    border: 1.5px solid var(--line);
+    border-radius: 2px;
+    box-shadow: var(--shadow);
+    padding: 26px;
+    margin-top: 24px;
+  }
+  .card h2 {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px; letter-spacing: .14em; text-transform: uppercase;
+    margin: 0 0 4px; color: var(--ink);
+  }
+  .card .hint { color: var(--ink-soft); font-size: 13px; margin: 0 0 18px; }
+
+  /* dropzone */
+  .drop {
+    border: 1.5px dashed var(--line);
+    border-radius: 2px;
+    background: var(--paper);
+    padding: 38px 22px; text-align: center;
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--accent); background: #f0f4ee; }
+  .drop .big { font-family: "IBM Plex Serif", serif; font-size: 19px; }
+  .drop .small { color: var(--ink-soft); font-size: 13px; margin-top: 6px; }
+  .drop .fname { font-family: "IBM Plex Mono", monospace; color: var(--accent-deep); font-weight: 500; }
+  input[type=file] { display: none; }
+
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 20px; }
+
+  button {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 13px; letter-spacing: .08em; text-transform: uppercase;
+    border: 1.5px solid var(--ink); background: var(--ink); color: #fbf8f0;
+    padding: 12px 22px; border-radius: 2px; cursor: pointer;
+    transition: transform .08s, background .15s;
+  }
+  button:hover:not(:disabled) { background: var(--accent-deep); border-color: var(--accent-deep); }
+  button:active:not(:disabled) { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.ghost { background: transparent; color: var(--ink); }
+  button.ghost:hover:not(:disabled) { background: var(--paper-2); color: var(--ink); border-color: var(--ink); }
+
+  /* progress */
+  .progress { margin-top: 22px; display: none; }
+  .progress.show { display: block; }
+  .bar-track { height: 8px; background: var(--paper-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+  .bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent), var(--accent-deep)); transition: width .25s ease; }
+  .status { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; }
+
+  /* summary chips */
+  .chips { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 4px; }
+  .chip { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+  .chip b { font-size: 22px; display: block; font-weight: 600; }
+  .chip.warn b { color: var(--warn); }
+  .chip.bad b { color: var(--danger); }
+
+  /* preview table */
+  .table-scroll { overflow-x: auto; border: 1.5px solid var(--line); border-radius: 2px; margin-top: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  thead th {
+    font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    text-align: left; background: var(--accent-deep); color: #f1f7f2;
+    padding: 10px 12px; white-space: nowrap; position: sticky; top: 0;
+  }
+  tbody td { padding: 9px 12px; border-top: 1px solid var(--line); white-space: nowrap; }
+  tbody tr:nth-child(even) { background: var(--paper); }
+  td.num { font-family: "IBM Plex Mono", monospace; text-align: right; }
+  td.pay { color: var(--danger); }
+  td.rec { color: var(--accent-deep); }
+  td.desc { white-space: normal; min-width: 220px; }
+
+  .msg { margin-top: 16px; padding: 12px 14px; border-radius: 2px; font-size: 13.5px; display: none; }
+  .msg.show { display: block; }
+  .msg.err { background: #f6e7e4; border: 1px solid #e0b6ae; color: var(--danger); }
+  .msg.note { background: #eef3ec; border: 1px solid #c9d8c6; color: var(--accent-deep); }
+
+  footer { margin-top: 40px; font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-soft); }
+  footer .key { color: var(--accent-deep); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Bank statement · FirstBit ERP</p>
+    <h1>Выписка → <em>Excel для импорта</em></h1>
+    <p class="lede">Загрузите выписку любого банка в PDF, CSV или Excel. Файл разбирается прямо в браузере, транзакции извлекает Claude Haiku, а строгий формат FirstBit (DD/MM/YYYY · 12500.00 · Payment/Receipt) собирается детерминированным кодом.</p>
+  </header>
+
+  <div class="card">
+    <h2>1 · Файл выписки</h2>
+    <p class="hint">PDF парсится через PDF.js, Excel — через SheetJS, всё локально. На сервер уходит только извлечённый текст.</p>
+
+    <label class="drop" id="drop">
+      <input type="file" id="file" accept=".pdf,.csv,.txt,.xls,.xlsx" />
+      <div class="big" id="dropBig">Перетащите файл или нажмите</div>
+      <div class="small" id="dropSmall">.pdf · .csv · .xls · .xlsx</div>
+    </label>
+
+    <div class="row">
+      <button id="run" disabled>Обработать</button>
+      <button id="reset" class="ghost" disabled>Сбросить</button>
+    </div>
+
+    <div class="progress" id="progress">
+      <div class="bar-track"><div class="bar-fill" id="bar"></div></div>
+      <div class="status" id="status">—</div>
+    </div>
+
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <h2>2 · Результат</h2>
+    <p class="hint">Превью первых 10 строк. Проверьте даты и раскладку Payment/Receipt перед скачиванием.</p>
+
+    <div class="chips" id="chips"></div>
+
+    <div class="table-scroll" style="margin-top:18px">
+      <table id="preview">
+        <thead>
+          <tr>
+            <th>Transaction Date</th><th>Reference No</th><th>Description</th>
+            <th>Payment Amount</th><th>Receipt Amount</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="row">
+      <button id="download">Скачать .xlsx</button>
+    </div>
+  </div>
+
+  <footer>
+    API-ключ Anthropic хранится на сервере Netlify как <span class="key">ANTHROPIC_API_KEY</span>. В браузере ключа нет — запросы идут через прокси-функцию /api/claude.
+  </footer>
+</div>
+
+<script>
+  "use strict";
+
+  // ---- настройки ----
+  const CHUNK_SIZE = 5000;            // символов на чанк (режем по строкам)
+  const ENDPOINT   = "/api/claude";   // редирект на netlify-функцию
+
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  // ---- состояние ----
+  let currentFile = null;
+  let resultRows = [];
+
+  // ---- ссылки на DOM ----
+  const $ = (id) => document.getElementById(id);
+  const fileInput = $("file"), drop = $("drop");
+  const runBtn = $("run"), resetBtn = $("reset"), dlBtn = $("download");
+  const progress = $("progress"), bar = $("bar"), status = $("status");
+  const msg = $("msg"), resultCard = $("resultCard"), chips = $("chips");
+  const tbody = $("preview").querySelector("tbody");
+
+  // ---- утилиты UI ----
+  function showMsg(text, kind) {
+    msg.textContent = text; msg.className = "msg show " + (kind || "note");
+  }
+  function hideMsg() { msg.className = "msg"; }
+  function setProgress(done, total, found) {
+    progress.classList.add("show");
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    bar.style.width = pct + "%";
+    status.textContent = `Чанк ${done}/${total} · найдено транзакций: ${found}`;
+  }
+
+  // ---- выбор файла ----
+  fileInput.addEventListener("change", (e) => selectFile(e.target.files[0]));
+  ["dragover", "dragenter"].forEach((ev) =>
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+  ["dragleave", "drop"].forEach((ev) =>
+    drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+  drop.addEventListener("drop", (e) => { if (e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]); });
+
+  function selectFile(f) {
+    if (!f) return;
+    currentFile = f;
+    $("dropBig").innerHTML = '<span class="fname">' + f.name + "</span>";
+    $("dropSmall").textContent = (f.size / 1024).toFixed(0) + " КБ";
+    runBtn.disabled = false; resetBtn.disabled = false;
+    hideMsg(); resultCard.style.display = "none";
+  }
+
+  resetBtn.addEventListener("click", () => {
+    currentFile = null; resultRows = []; fileInput.value = "";
+    $("dropBig").textContent = "Перетащите файл или нажмите";
+    $("dropSmall").textContent = ".pdf · .csv · .xls · .xlsx";
+    runBtn.disabled = true; resetBtn.disabled = true;
+    progress.classList.remove("show"); bar.style.width = "0%";
+    resultCard.style.display = "none"; hideMsg();
+  });
+
+  // ---- извлечение текста из файла (в браузере) ----
+  async function extractText(file) {
+    const ext = file.name.split(".").pop().toLowerCase();
+    const buf = await file.arrayBuffer();
+
+    if (ext === "pdf") {
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      let out = [];
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        out.push(content.items.map((i) => i.str).join(" "));
+      }
+      return out.join("\n");
+    }
+
+    if (ext === "xls" || ext === "xlsx") {
+      const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+      return wb.SheetNames
+        .map((name) => XLSX.utils.sheet_to_csv(wb.Sheets[name]))
+        .join("\n");
+    }
+
+    // csv / txt
+    return new TextDecoder("utf-8").decode(buf);
+  }
+
+  // ---- нарезка по строкам, не разрывая транзакции ----
+  function chunkByLines(text, maxChars) {
+    const lines = text.split(/\r?\n/);
+    const chunks = [];
+    let cur = "";
+    for (let line of lines) {
+      // очень длинная одиночная строка (например, вся страница PDF) — рубим жёстко
+      while (line.length > maxChars) {
+        if (cur) { chunks.push(cur); cur = ""; }
+        chunks.push(line.slice(0, maxChars));
+        line = line.slice(maxChars);
+      }
+      if (cur.length + line.length + 1 > maxChars) { chunks.push(cur); cur = ""; }
+      cur += (cur ? "\n" : "") + line;
+    }
+    if (cur.trim()) chunks.push(cur);
+    return chunks.filter((c) => c.trim().length > 0);
+  }
+
+  // ---- вызов прокси-функции ----
+  async function extractChunk(text) {
+    const res = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+    return Array.isArray(data.transactions) ? data.transactions : [];
+  }
+
+  // ===== ДЕТЕРМИНИРОВАННОЕ ПРИВЕДЕНИЕ К ФОРМАТУ FIRSTBIT =====
+
+  const pad = (n) => String(n).padStart(2, "0");
+
+  // дата -> строго DD/MM/YYYY. Основной вход — ISO от модели, плюс запасные форматы.
+  function toFirstBitDate(s) {
+    if (!s) return "";
+    s = String(s).trim();
+
+    // ISO: YYYY-MM-DD
+    let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+    if (m) return `${pad(m[3])}/${pad(m[2])}/${m[1]}`;
+
+    // DD/MM/YYYY или DD.MM.YYYY или DD-MM-YYYY (день первый)
+    m = /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})/.exec(s);
+    if (m) {
+      let y = m[3].length === 2 ? "20" + m[3] : m[3];
+      return `${pad(m[1])}/${pad(m[2])}/${y}`;
+    }
+
+    // последняя попытка через Date
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) {
+      return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+    }
+    return s; // не распознали — оставляем как есть, видно в превью
+  }
+
+  // сумма -> "12500.00": положительное число, точка, два знака, без разделителей тысяч.
+  // Claude обычно отдаёт JSON-число; строковый разбор — защитный, понимает и US, и EU формат.
+  function toAmount(v) {
+    if (v === null || v === undefined || v === "") return null;
+    let n;
+    if (typeof v === "number") {
+      n = v;
+    } else {
+      let str = String(v).replace(/[^0-9.,\-]/g, "");
+      const neg = str.indexOf("-") > -1;
+      str = str.replace(/-/g, "");
+      const lastSep = Math.max(str.lastIndexOf("."), str.lastIndexOf(","));
+      if (lastSep > -1) {
+        const decDigits = str.length - lastSep - 1;
+        if (decDigits === 1 || decDigits === 2) {
+          // последний разделитель — десятичный, остальные (тысячи) убираем
+          str = str.slice(0, lastSep).replace(/[.,]/g, "") + "." + str.slice(lastSep + 1);
+        } else {
+          // все разделители — группировка тысяч
+          str = str.replace(/[.,]/g, "");
+        }
+      }
+      n = parseFloat(str);
+      if (neg) n = -n;
+    }
+    if (!isFinite(n)) return null;
+    return Math.abs(n).toFixed(2);
+  }
+
+  // сборка финальных строк + порядковый Reference No, раскладка Payment/Receipt
+  function normalize(rawList) {
+    const rows = [];
+    let warnings = 0;
+    let skipped = 0;
+
+    rawList.forEach((t) => {
+      const amt = toAmount(t.amount);
+      if (amt === null) { skipped++; return; } // без суммы строка бесполезна
+
+      const seq = rows.length + 1; // порядковый номер итоговой строки
+      let ref = (t.reference == null ? "" : String(t.reference)).trim();
+      if (!ref) ref = String(seq); // Reference No обязателен и непустой
+
+      const type = String(t.type || "").toLowerCase();
+      let payment = "", receipt = "";
+      if (type === "payment") {
+        payment = amt;
+      } else if (type === "receipt") {
+        receipt = amt;
+      } else {
+        // тип не распознан — кладём в Receipt и помечаем как требующее проверки
+        receipt = amt; warnings++;
+      }
+
+      rows.push({
+        "Transaction Date": toFirstBitDate(t.date),
+        "Reference No": ref,
+        "Description": (t.description == null ? "" : String(t.description)).trim(),
+        "Payment Amount": payment,
+        "Receipt Amount": receipt,
+        _warn: type !== "payment" && type !== "receipt",
+      });
+    });
+
+    return { rows, warnings, skipped };
+  }
+
+  // ---- основной запуск ----
+  runBtn.addEventListener("click", async () => {
+    if (!currentFile) return;
+    runBtn.disabled = true; resetBtn.disabled = true;
+    hideMsg(); resultCard.style.display = "none"; resultRows = [];
+
+    try {
+      status.textContent = "Чтение файла…";
+      progress.classList.add("show"); bar.style.width = "0%";
+
+      const text = await extractText(currentFile);
+      if (!text.trim()) throw new Error("Не удалось извлечь текст из файла.");
+
+      const chunks = chunkByLines(text, CHUNK_SIZE);
+      if (chunks.length === 0) throw new Error("Файл пустой после извлечения текста.");
+
+      const raw = [];
+      let failedChunks = 0;
+
+      // строго последовательная обработка чанков
+      for (let i = 0; i < chunks.length; i++) {
+        setProgress(i, chunks.length, raw.length);
+        try {
+          const tx = await extractChunk(chunks[i]);
+          raw.push(...tx);
+        } catch (e) {
+          failedChunks++;
+          console.error("Чанк " + (i + 1) + ":", e.message);
+        }
+      }
+      setProgress(chunks.length, chunks.length, raw.length);
+
+      const { rows, warnings, skipped } = normalize(raw);
+      resultRows = rows;
+
+      if (rows.length === 0) {
+        showMsg("Транзакции не найдены. Проверьте, что файл — это выписка с операциями.", "err");
+        runBtn.disabled = false; resetBtn.disabled = false;
+        return;
+      }
+
+      renderResult(rows, { chunks: chunks.length, failedChunks, warnings, skipped });
+      if (failedChunks > 0)
+        showMsg(`Внимание: ${failedChunks} из ${chunks.length} чанков не обработались (вероятно, лимиты API). Результат частичный — стоит перезапустить.`, "err");
+    } catch (e) {
+      showMsg("Ошибка: " + e.message, "err");
+    } finally {
+      runBtn.disabled = false; resetBtn.disabled = false;
+    }
+  });
+
+  // ---- превью + сводка ----
+  function renderResult(rows, stats) {
+    resultCard.style.display = "block";
+
+    chips.innerHTML = "";
+    const chip = (label, value, cls) =>
+      `<div class="chip ${cls || ""}">${label}<b>${value}</b></div>`;
+    chips.innerHTML =
+      chip("Транзакций", rows.length) +
+      chip("Чанков", stats.chunks) +
+      (stats.warnings ? chip("Тип под вопросом", stats.warnings, "warn") : "") +
+      (stats.skipped ? chip("Пропущено (нет суммы)", stats.skipped, "warn") : "") +
+      (stats.failedChunks ? chip("Сбойных чанков", stats.failedChunks, "bad") : "");
+
+    tbody.innerHTML = "";
+    rows.slice(0, 10).forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        `<td>${esc(r["Transaction Date"])}${r._warn ? " ⚠" : ""}</td>` +
+        `<td>${esc(r["Reference No"])}</td>` +
+        `<td class="desc">${esc(r["Description"])}</td>` +
+        `<td class="num pay">${esc(r["Payment Amount"])}</td>` +
+        `<td class="num rec">${esc(r["Receipt Amount"])}</td>`;
+      tbody.appendChild(tr);
+    });
+
+    resultCard.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function esc(s) {
+    return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+  }
+
+  // ---- выгрузка xlsx ----
+  dlBtn.addEventListener("click", () => {
+    if (!resultRows.length) return;
+    // только пять нужных колонок, значения — текст (точный контроль формата)
+    const data = resultRows.map((r) => ({
+      "Transaction Date": r["Transaction Date"],
+      "Reference No": r["Reference No"],
+      "Description": r["Description"],
+      "Payment Amount": r["Payment Amount"],
+      "Receipt Amount": r["Receipt Amount"],
+    }));
+    const header = ["Transaction Date", "Reference No", "Description", "Payment Amount", "Receipt Amount"];
+    const ws = XLSX.utils.json_to_sheet(data, { header });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "FirstBit");
+    XLSX.writeFile(wb, "firstbit_import.xlsx");
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  # Функция последовательно дёргает Anthropic API — даём запас по времени.
+  # На бесплатном плане максимум 10s, на Pro — до 26s. См. README.
+  [functions."claude"]
+    timeout = 26
+
+# Короткий путь /api/claude вместо /.netlify/functions/claude
+[[redirects]]
+  from = "/api/claude"
+  to = "/.netlify/functions/claude"
+  status = 200
